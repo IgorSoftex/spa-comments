@@ -1,5 +1,5 @@
 from django.db import models
-# Библиотека для очистки HTML от опасного кода (XSS атак (Cross-Site Scripting)...)
+# Библиотека bleach для очистки HTML от опасного кода (XSS атак (Cross-Site Scripting)...)
 # В нашем проекте разрешено только четыре тега
 import bleach
 
