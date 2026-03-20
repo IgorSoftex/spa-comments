@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SPA Comments</title>
+  </head>
+  <body>
+    <!--
+      Корневой элемент Vue-приложения.
+      Vue заменит содержимое этого div своими компонентами.
+      Вся логика отображения управляется JavaScript — не сервером.
+      Это и есть SPA (Single Page Application):
+      одна HTML-страница, контент меняется динамически без перезагрузки.
+    -->
+    <div id="app"></div>
+
+    <!--
+      Точка входа в JavaScript-приложение.
+      type="module" — используем ES-модули (import/export).
+      Vite обрабатывает этот файл и собирает всё приложение.
+    -->
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
