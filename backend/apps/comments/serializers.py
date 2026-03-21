@@ -60,8 +60,8 @@ class CommentSerializer(serializers.ModelSerializer):
             allowed_types = ['image/jpeg', 'image/png']
             if value.content_type not in allowed_types:
                 raise serializers.ValidationError('Разрешено только JPEG или PNG.')
-            if value.size > 1 * 1024 * 1024:
-                raise serializers.ValidationError('Размер изображения не более 1 МБ.')
+            if value.size > 10 * 1024 * 1024:
+                raise serializers.ValidationError('Размер изображения не более 10 МБ.')
         return value
 
     def validate_attachment(self, value):

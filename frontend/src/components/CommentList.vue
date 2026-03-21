@@ -246,7 +246,14 @@ async function openTxt(url) {
 }
 
 function fileName(url) {
-  return url.split('/').pop()
+  // decodeURIComponent розкодовує URL-encoded назву файлу:
+  // %D0%9E%D1%82%D0%BA... → Откл...
+  // try/catch на випадок якщо рядок не можна розкодувати (зламаний URL)
+  try {
+    return decodeURIComponent(url.split('/').pop())
+  } catch {
+    return url.split('/').pop()
+  }
 }
 
 // ==================== ФОРМАТУВАННЯ ДАТИ ====================

@@ -80,7 +80,14 @@ async function openTxt(url) {
   }
 }
 
-function fileName(url) { return url.split('/').pop() }
+function fileName(url) {
+  try {
+    return decodeURIComponent(url.split('/').pop())
+  } catch {
+    return url.split('/').pop()
+  }
+}
+
 </script>
 
 <style scoped>
