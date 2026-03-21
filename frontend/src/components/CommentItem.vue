@@ -1,391 +1,140 @@
 <template>
-  <div class="comment-item" :class="{ 'is-reply': depth > 0 }">
-
-    <!-- Шапка комментария: имя, email, дата -->
-    <div class="comment-header">
-      <div class="comment-author">
-        <!-- Если есть домашняя страница — имя кликабельно -->
-
-        <a v-if="comment.home_page" :href="comment.home_page" target="_blank" class="author-name">{{ comment.user_name }}</a>
-        <span v-else class="author-name">{{ comment.user_name }}</span>
-
-        <span class="author-email">{{ comment.email }}</span>
+  <!-- Рекурсивний компонент для каскадного відображення відповідей -->
+  <div class="comment-item" :style="{ marginLeft: depth * 24 + 'px' }">
+    <div class="comment-bubble">
+      <div class="comment-meta">
+        <span class="ci-username">{{ comment.user_name }}</span>
+        <a v-if="comment.home_page" :href="comment.home_page" target="_blank" class="ci-homepage">🔗</a>
+        <span class="ci-email">{{ comment.email }}</span>
+        <span class="ci-date">{{ formatDate(comment.created_at) }}</span>
       </div>
 
-      <!-- Дата создания комментария -->
-      <!-- formatDate() преобразует ISO строку в читаемый формат -->
-      <span class="comment-date">{{ formatDate(comment.created_at) }}</span>
-    </div>
+      <div class="comment-text" v-html="comment.text"></div>
 
-    <!-- Текст комментария -->
-    <!-- v-html — отображает HTML-теги внутри текста.
-         Это безопасно: Django уже очистил текст через bleach,
-         оставив только разрешённые теги: a, strong, i, code -->
-    <div class="comment-text" v-html="comment.text"></div>
-
-    <!-- Изображение (если прикреплено) -->
-    <div v-if="comment.image" class="comment-image">
-      <img :src="comment.image" alt="Прикреплённое изображение" />
-    </div>
-
-    <!-- Файл-вложение (если прикреплено) -->
-    <div v-if="comment.attachment" class="comment-attachment">
-      <a :href="comment.attachment" target="_blank">
-        📎 Скачать вложение
-      </a>
-    </div>
-
-    <!-- Кнопка "Ответить" и счётчик ответов -->
-    <div class="comment-footer">
-      <button @click="toggleReplyForm" class="btn-reply">
-        💬 Ответить
-      </button>
-      <span v-if="comment.replies_count > 0" class="replies-count">
-        {{ comment.replies_count }}
-        {{ pluralize(comment.replies_count, 'ответ', 'ответа', 'ответов') }}
-      </span>
-    </div>
-
-    <!-- Форма ответа на этот комментарий -->
-    <!-- v-if="showReplyForm" — показывается только после нажатия "Ответить" -->
-    <div v-if="showReplyForm" class="reply-form">
-      <h4>Ответить на комментарий {{ comment.user_name }}</h4>
-
-      <div v-if="replyError" class="alert alert-error">{{ replyError }}</div>
-      <div v-if="replySuccess" class="alert alert-success">{{ replySuccess }}</div>
-
-      <div class="form-group">
-        <input v-model="replyForm.user_name" placeholder="Имя *" required />
-      </div>
-      <div class="form-group">
-        <input v-model="replyForm.email" type="email" placeholder="Email *" required />
-      </div>
-      <div class="form-group">
-        <textarea v-model="replyForm.text" rows="3" placeholder="Текст ответа *" required></textarea>
-      </div>
-
-      <!-- Мини-капча для ответа -->
-      <div class="form-group captcha-group">
-        <div class="captcha-row">
-          <img :src="replyCaptchaUrl" alt="CAPTCHA" class="captcha-image" />
-          <button type="button" @click="refreshReplyCaptcha" class="btn-refresh">
-            🔄
-          </button>
+      <!-- Вкладені файли -->
+      <div v-if="comment.image || comment.attachment" class="ci-files">
+        <div v-if="comment.image" class="ci-thumb" @click="openImage(comment.image)">
+          <img :src="comment.image" alt="attachment" />
         </div>
-        <input v-model="replyForm.captcha" placeholder="Текст с картинки *" />
+        <div v-if="comment.attachment" class="ci-txt" @click="openTxt(comment.attachment)">
+          📄 {{ fileName(comment.attachment) }}
+        </div>
       </div>
 
-      <div class="reply-buttons">
-        <button @click="submitReply" :disabled="replySubmitting" class="btn-submit">
-          {{ replySubmitting ? 'Отправка...' : 'Отправить ответ' }}
+      <div class="ci-actions">
+        <button class="btn btn-sm btn-primary" @click="$emit('reply', comment.id)">
+          Відповісти
         </button>
-        <button @click="toggleReplyForm" class="btn-cancel">Отмена</button>
+        <button
+          v-if="comment.replies && comment.replies.length"
+          class="btn btn-sm btn-secondary"
+          @click="showReplies = !showReplies"
+        >
+          {{ showReplies ? 'Згорнути' : `Відповіді (${comment.replies.length})` }}
+        </button>
       </div>
     </div>
 
-    <!-- Вложенные ответы (replies) -->
-    <!-- Рекурсия: CommentItem отображает CommentItem для каждого ответа.
-         :depth="depth + 1" — увеличиваем глубину вложенности для отступов. -->
-    <div v-if="replies.length > 0" class="replies">
+    <!-- Рекурсивні відповіді -->
+    <div v-if="showReplies && comment.replies && comment.replies.length" class="ci-replies">
       <CommentItem
-        v-for="reply in replies"
+        v-for="reply in comment.replies"
         :key="reply.id"
         :comment="reply"
         :depth="depth + 1"
+        @reply="$emit('reply', $event)"
       />
     </div>
-
-    <!-- Кнопка загрузки ответов (если они есть но ещё не загружены) -->
-    <button
-      v-if="comment.replies_count > 0 && !repliesLoaded && depth === 0"
-      @click="loadReplies"
-      class="btn-load-replies"
-    >
-      Показать ответы ({{ comment.replies_count }})
-    </button>
-
   </div>
 </template>
 
 <script setup>
-import { ref, defineProps } from 'vue'
-import axios from 'axios'
-import { useCommentsStore } from '../stores/comments'
+import { ref, inject } from 'vue'
 
-// defineProps — объявляем входные параметры компонента.
-// comment — объект комментария переданный из CommentList или родительского CommentItem.
-// depth — глубина вложенности (0 = корневой, 1 = ответ, 2 = ответ на ответ...)
 const props = defineProps({
   comment: { type: Object, required: true },
   depth:   { type: Number, default: 0 },
 })
 
-const store = useCommentsStore()
+defineEmits(['reply'])
 
-// Список загруженных ответов на этот комментарий
-const replies = ref([])
+const showReplies = ref(true)
+const openLightbox = inject('openLightbox')
 
-// Флаг — были ли уже загружены ответы
-const repliesLoaded = ref(false)
-
-// Показывать ли форму ответа
-const showReplyForm = ref(false)
-
-// Данные формы ответа
-const replyForm = ref({
-  user_name: '',
-  email: '',
-  text: '',
-  captcha: '',
-})
-
-const replySubmitting = ref(false)
-const replyError = ref('')
-const replySuccess = ref('')
-
-// URL капчи для формы ответа (отдельная от основной формы)
-const replyCaptchaUrl = ref(`/api/captcha/?t=${Date.now()}`)
-
-// Переключает видимость формы ответа
-function toggleReplyForm() {
-  showReplyForm.value = !showReplyForm.value
-  if (showReplyForm.value) {
-    refreshReplyCaptcha()
-  }
-}
-
-// Обновляет капчу для формы ответа
-function refreshReplyCaptcha() {
-  replyCaptchaUrl.value = `/api/captcha/?t=${Date.now()}`
-}
-
-// Загружает ответы на этот комментарий с сервера.
-// GET /api/comments/<id>/ возвращает комментарий с вложенными replies.
-async function loadReplies() {
-  try {
-    const response = await axios.get(`/api/comments/${props.comment.id}/`)
-    replies.value = response.data.replies || []
-    repliesLoaded.value = true
-  } catch (err) {
-    console.error('Ошибка загрузки ответов:', err)
-  }
-}
-
-// Отправляет ответ на комментарий
-async function submitReply() {
-  replySubmitting.value = true
-  replyError.value = ''
-  replySuccess.value = ''
-
-  // Проверяем капчу
-  const captchaValid = await store.verifyCaptcha(replyForm.value.captcha)
-  if (!captchaValid) {
-    replyError.value = 'Неверная капча.'
-    refreshReplyCaptcha()
-    replyForm.value.captcha = ''
-    replySubmitting.value = false
-    return
-  }
-
-  // Формируем данные ответа.
-  // parent — id родительского комментария (на который отвечаем)
-  const formData = new FormData()
-  formData.append('user_name', replyForm.value.user_name)
-  formData.append('email', replyForm.value.email)
-  formData.append('text', replyForm.value.text)
-  formData.append('parent', props.comment.id)
-
-  const success = await store.createComment(formData)
-
-  if (success) {
-    replySuccess.value = 'Ответ добавлен!'
-    replyForm.value = { user_name: '', email: '', text: '', captcha: '' }
-    // Перезагружаем ответы чтобы показать новый
-    await loadReplies()
-    setTimeout(() => { showReplyForm.value = false }, 1500)
-  } else {
-    replyError.value = 'Ошибка при отправке ответа.'
-  }
-
-  replySubmitting.value = false
-}
-
-// Форматирует ISO дату в читаемый формат: "20.03.2026 15:30"
-function formatDate(isoString) {
-  const date = new Date(isoString)
-  return date.toLocaleString('ru-RU', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+function formatDate(dt) {
+  return new Date(dt).toLocaleString('uk-UA', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit',
   })
 }
 
-// Склонение числительных для русского языка.
-// pluralize(1, 'ответ', 'ответа', 'ответов') → '1 ответ'
-// pluralize(3, 'ответ', 'ответа', 'ответов') → '3 ответа'
-// pluralize(11, 'ответ', 'ответа', 'ответов') → '11 ответов'
-function pluralize(count, one, few, many) {
-  const mod10 = count % 10
-  const mod100 = count % 100
-  if (mod10 === 1 && mod100 !== 11) return `${count} ${one}`
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return `${count} ${few}`
-  return `${count} ${many}`
+function openImage(url) { openLightbox({ type: 'image', url }) }
+
+async function openTxt(url) {
+  try {
+    const res = await fetch(url)
+    const text = await res.text()
+    openLightbox({ type: 'text', content: text })
+  } catch {
+    window.open(url, '_blank')
+  }
 }
+
+function fileName(url) { return url.split('/').pop() }
 </script>
 
 <style scoped>
-.comment-item {
-  border: 1px solid #e0e0e0;
-  border-radius: 6px;
-  padding: 15px;
-  margin-bottom: 15px;
-  background: #fff;
+.comment-item { margin-bottom: 10px; }
+
+.comment-bubble {
+  background: #f8f9ff;
+  border: 1px solid #e0e7ff;
+  border-left: 3px solid #4f8ef7;
+  border-radius: 8px;
+  padding: 12px 16px;
 }
 
-/* Вложенные комментарии имеют отступ и другой фон */
-.comment-item.is-reply {
-  margin-left: 20px;
-  background: #f9f9f9;
-  border-left: 3px solid #2c3e50;
-}
-
-.comment-header {
+.comment-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 10px;
-}
-
-.comment-author { display: flex; flex-direction: column; gap: 2px; }
-
-.author-name {
-  font-weight: bold;
-  color: #2c3e50;
-  text-decoration: none;
-  font-size: 15px;
-}
-
-.author-name:hover { text-decoration: underline; }
-
-.author-email { font-size: 12px; color: #999; }
-
-.comment-date { font-size: 12px; color: #aaa; white-space: nowrap; }
-
-.comment-text {
-  margin-bottom: 10px;
-  line-height: 1.6;
-  font-size: 14px;
-}
-
-.comment-image img {
-  max-width: 100%;
-  max-height: 240px;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
-
-.comment-attachment { margin-bottom: 10px; font-size: 13px; }
-.comment-attachment a { color: #2980b9; text-decoration: none; }
-
-.comment-footer {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-top: 10px;
-}
-
-.btn-reply {
-  padding: 4px 12px;
-  border: 1px solid #2c3e50;
-  border-radius: 4px;
-  background: transparent;
-  color: #2c3e50;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.replies-count { font-size: 13px; color: #999; }
-
-.replies { margin-top: 15px; }
-
-.btn-load-replies {
-  margin-top: 10px;
-  padding: 6px 14px;
-  border: 1px dashed #aaa;
-  border-radius: 4px;
-  background: transparent;
-  color: #666;
-  cursor: pointer;
-  font-size: 13px;
-  width: 100%;
-}
-
-.reply-form {
-  margin-top: 15px;
-  padding: 15px;
-  background: #f0f4f8;
-  border-radius: 6px;
-}
-
-.reply-form h4 { margin-bottom: 12px; font-size: 14px; color: #555; }
-
-.form-group { margin-bottom: 10px; }
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 7px 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.captcha-row {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
+.ci-username { font-weight: 700; color: #2d3436; }
+.ci-homepage { text-decoration: none; }
+.ci-email    { color: #4f8ef7; font-size: 0.85rem; }
+.ci-date     { color: #aaa; font-size: 0.8rem; margin-left: auto; }
 
-.captcha-image { border: 1px solid #ddd; border-radius: 4px; }
+.comment-text { font-size: 0.9rem; line-height: 1.5; margin-bottom: 8px; }
+/* Безпечний рендер HTML — bleach вже очистив на сервері */
+.comment-text :deep(a)      { color: #4f8ef7; }
+.comment-text :deep(code)   { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+.comment-text :deep(strong) { font-weight: 700; }
+.comment-text :deep(i)      { font-style: italic; }
 
-.btn-refresh {
+.ci-files {
+  display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
+}
+.ci-thumb {
+  cursor: pointer;
+  border: 2px solid #e0e7ff;
+  border-radius: 6px;
+  padding: 3px;
+  transition: border-color 0.2s;
+}
+.ci-thumb:hover { border-color: #4f8ef7; }
+.ci-thumb img { max-width: 80px; max-height: 60px; border-radius: 4px; display: block; }
+.ci-txt {
+  cursor: pointer;
+  color: #4f8ef7;
+  font-size: 0.85rem;
   padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-  background: #fff;
+  border: 1.5px dashed #b0c4ff;
+  border-radius: 6px;
 }
+.ci-txt:hover { background: #eef2ff; }
 
-.reply-buttons { display: flex; gap: 10px; margin-top: 10px; }
-
-.btn-submit {
-  padding: 8px 16px;
-  background: #2c3e50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.btn-submit:disabled { background: #aaa; cursor: not-allowed; }
-
-.btn-cancel {
-  padding: 8px 16px;
-  background: transparent;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.alert {
-  padding: 8px 12px;
-  border-radius: 4px;
-  margin-bottom: 10px;
-  font-size: 13px;
-}
-
-.alert-success { background: #d4edda; color: #155724; }
-.alert-error   { background: #f8d7da; color: #721c24; }
+.ci-actions { display: flex; gap: 6px; margin-top: 6px; }
+.ci-replies { margin-top: 8px; }
 </style>

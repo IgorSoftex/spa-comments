@@ -167,3 +167,12 @@ USE_TZ = True     # использовать временные зоны
 # Тип поля первичного ключа по умолчанию для моделей.
 # BigAutoField — 64-битное целое число (до 9 квинтиллионов записей).
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# ==================== DRF НАСТРОЙКИ ====================
+# PageNumberPagination — стандартная пагинация DRF.
+# Возвращает {count, next, previous, results} вместо простого массива.
+# PAGE_SIZE – количество комментариев на одной странице.
+REST_FRAMEWORK = {
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 25,
+}

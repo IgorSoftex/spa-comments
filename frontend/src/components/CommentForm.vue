@@ -1,330 +1,410 @@
 <template>
   <div class="comment-form">
-    <h2>Добавить комментарий</h2>
-
-    <!-- Сообщение об успехе -->
-    <div v-if="successMessage" class="alert alert-success">
-      {{ successMessage }}
+    <!-- Перемикач: Форма / Прев'ю -->
+    <div class="form-tabs">
+      <button
+        :class="['tab-btn', { active: tab === 'form' }]"
+        type="button"
+        @click="tab = 'form'"
+      >Форма</button>
+      <button
+        :class="['tab-btn', { active: tab === 'preview' }]"
+        type="button"
+        @click="tab = 'preview'"
+      >Прев'ю</button>
     </div>
 
-    <!-- Сообщение об ошибке -->
-    <div v-if="errorMessage" class="alert alert-error">
-      {{ errorMessage }}
+    <!-- ===== ПРЕВ'Ю ===== -->
+    <div v-if="tab === 'preview'" class="preview-pane">
+      <div class="preview-bubble">
+        <div class="preview-meta">
+          <strong>{{ form.user_name || 'Ім\'я' }}</strong>
+          <span v-if="form.email" class="preview-email">{{ form.email }}</span>
+          <span v-if="form.home_page">
+            <a :href="form.home_page" target="_blank">{{ form.home_page }}</a>
+          </span>
+        </div>
+        <div class="preview-text" v-html="previewHtml || '<em>Текст повідомлення...</em>'"></div>
+      </div>
     </div>
 
-    <form @submit.prevent="handleSubmit">
+    <!-- ===== ФОРМА ===== -->
+    <form v-else @submit.prevent="submitForm" class="form-body">
 
-      <!-- Имя пользователя -->
-      <div class="form-group">
-        <label>Имя пользователя *</label>
-        <input
-          v-model="form.user_name"
-          type="text"
-          placeholder="Только латиница, цифры и дефис"
-          required
-        />
+      <div class="form-row">
+        <!-- User Name -->
+        <div class="form-group">
+          <label for="user_name">User Name <span class="req">*</span></label>
+          <input
+            id="user_name"
+            v-model="form.user_name"
+            type="text"
+            placeholder="Тільки латиниця та цифри"
+            autocomplete="username"
+          />
+          <div v-if="errors.user_name" class="field-error">{{ errors.user_name }}</div>
+        </div>
+
+        <!-- E-mail -->
+        <div class="form-group">
+          <label for="email">E-mail <span class="req">*</span></label>
+          <input
+            id="email"
+            v-model="form.email"
+            type="email"
+            placeholder="example@mail.com"
+            autocomplete="email"
+          />
+          <div v-if="errors.email" class="field-error">{{ errors.email }}</div>
+        </div>
       </div>
 
-      <!-- Email -->
+      <!-- Home page -->
       <div class="form-group">
-        <label>Email *</label>
+        <label for="home_page">Home page (необов'язково)</label>
         <input
-          v-model="form.email"
-          type="email"
-          placeholder="user@example.com"
-          required
-        />
-      </div>
-
-      <!-- Домашняя страница (необязательно) -->
-      <div class="form-group">
-        <label>Домашняя страница</label>
-        <input
+          id="home_page"
           v-model="form.home_page"
           type="url"
           placeholder="https://example.com"
         />
-      </div>
-
-      <!-- Текст комментария -->
-      <div class="form-group">
-        <label>Комментарий *</label>
-        <!-- Панель с разрешёнными тегами -->
-        <div class="tags-toolbar">
-          <span>Разрешённые теги:</span>
-          <button type="button" @click="insertTag('strong')"><strong>B</strong></button>
-          <button type="button" @click="insertTag('i')"><i>I</i></button>
-          <button type="button" @click="insertTag('code')">code</button>
-          <button type="button" @click="insertTag('a')">[a]</button>
-        </div>
-        <textarea
-          ref="textareaRef"
-          v-model="form.text"
-          rows="5"
-          placeholder="Текст комментария..."
-          required
-        ></textarea>
-      </div>
-
-      <!-- Изображение (необязательно) -->
-      <div class="form-group">
-        <label>Изображение (JPEG/PNG, до 1 МБ)</label>
-        <input
-          type="file"
-          accept="image/jpeg,image/png"
-          @change="handleImageChange"
-        />
-      </div>
-
-      <!-- Вложение (необязательно) -->
-      <div class="form-group">
-        <label>Файл (TXT/XML, до 100 КБ)</label>
-        <input
-          type="file"
-          accept=".txt,.xml"
-          @change="handleAttachmentChange"
-        />
+        <div v-if="errors.home_page" class="field-error">{{ errors.home_page }}</div>
       </div>
 
       <!-- CAPTCHA -->
       <div class="form-group captcha-group">
-        <label>Введите текст с картинки *</label>
+        <label>CAPTCHA <span class="req">*</span></label>
         <div class="captcha-row">
-          <!-- Картинка капчи — src берётся из store -->
           <img
-            :src="store.captchaUrl"
+            v-if="captchaImage"
+            :src="captchaImage"
+            class="captcha-img"
             alt="CAPTCHA"
-            class="captcha-image"
+            @click="loadCaptcha"
+            title="Натисніть для оновлення"
           />
-          <!-- Кнопка обновить капчу -->
-          <button type="button" @click="store.refreshCaptcha()" class="btn-refresh">
-            🔄 Обновить
+          <div v-else class="captcha-placeholder" @click="loadCaptcha">
+            Завантажити CAPTCHA
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary captcha-refresh" @click="loadCaptcha">
+            ↻
           </button>
         </div>
         <input
-          v-model="form.captcha"
+          v-model="form.captcha_answer"
           type="text"
-          placeholder="Введите символы с картинки"
-          required
+          placeholder="Введіть символи з картинки"
+          style="margin-top: 6px;"
+          maxlength="10"
         />
+        <div v-if="errors.captcha" class="field-error">{{ errors.captcha }}</div>
       </div>
 
-      <!-- Кнопка отправки -->
-      <button type="submit" class="btn-submit" :disabled="submitting">
-        {{ submitting ? 'Отправка...' : 'Отправить комментарий' }}
-      </button>
+      <!-- Панель тегів -->
+      <div class="form-group">
+        <label>Text <span class="req">*</span></label>
+        <TagToolbar :textarea-ref="textareaEl" @update:model-value="form.text = $event" />
+        <textarea
+          ref="textareaEl"
+          v-model="form.text"
+          placeholder="Ваше повідомлення... Можна використовувати: <i>, <strong>, <code>, <a>"
+          rows="5"
+        ></textarea>
+        <div v-if="errors.text" class="field-error">{{ errors.text }}</div>
+        <div class="text-hint">
+          Дозволені теги: &lt;a href="" title=""&gt;, &lt;code&gt;, &lt;i&gt;, &lt;strong&gt;
+        </div>
+      </div>
 
+      <!-- Файли -->
+      <div class="form-row">
+        <!-- Зображення -->
+        <div class="form-group">
+          <label>Зображення (JPG, GIF, PNG; буде зменшено до 320×240)</label>
+          <input type="file" accept=".jpg,.jpeg,.gif,.png" @change="onImageChange" />
+          <div v-if="errors.image" class="field-error">{{ errors.image }}</div>
+          <div v-if="imagePreviewUrl" class="img-preview">
+            <img :src="imagePreviewUrl" alt="Preview" />
+          </div>
+        </div>
+
+        <!-- TXT -->
+        <div class="form-group">
+          <label>Текстовий файл (TXT, макс. 100 КБ)</label>
+          <input type="file" accept=".txt" @change="onTxtChange" />
+          <div v-if="errors.attachment" class="field-error">{{ errors.attachment }}</div>
+          <div v-if="form.attachment" class="file-selected">
+            📄 {{ form.attachment.name }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Загальна помилка -->
+      <div v-if="errors.general" class="field-error general-error">{{ errors.general }}</div>
+
+      <!-- Кнопки -->
+      <div class="form-footer">
+        <button type="button" class="btn btn-secondary" @click="$emit('cancel')">
+          Скасувати
+        </button>
+        <button type="submit" class="btn btn-success" :disabled="submitting">
+          {{ submitting ? 'Надсилаємо...' : 'Надіслати' }}
+        </button>
+      </div>
     </form>
   </div>
 </template>
 
 <script setup>
-// ref() — реактивная переменная (при изменении Vue обновляет шаблон)
-import { ref } from 'vue'
-// Импортируем наш Pinia store для работы с комментариями
-import { useCommentsStore } from '../stores/comments'
+import { ref, reactive, computed, onMounted } from 'vue'
+import api from '../api/comments.js'
+import TagToolbar from './TagToolbar.vue'
 
-// Получаем экземпляр store
-const store = useCommentsStore()
+const props = defineProps({
+  parentId: { type: Number, default: null },
+})
+const emit = defineEmits(['submitted', 'cancel'])
 
-// Ссылка на DOM-элемент <textarea> для вставки тегов
-const textareaRef = ref(null)
+const tab         = ref('form')
+const submitting  = ref(false)
+const captchaImage = ref(null)
+const imagePreviewUrl = ref(null)
+const textareaEl  = ref(null)
 
-// Флаг — идёт ли отправка формы (чтобы заблокировать кнопку)
-const submitting = ref(false)
-
-// Сообщения для пользователя
-const successMessage = ref('')
-const errorMessage = ref('')
-
-// Данные формы — реактивный объект
-// v-model в шаблоне связывает поля ввода с этими значениями
-const form = ref({
-  user_name: '',
-  email: '',
-  home_page: '',
-  text: '',
-  captcha: '',
-  image: null,       // File объект или null
-  attachment: null,  // File объект или null
+const form = reactive({
+  user_name:     '',
+  email:         '',
+  home_page:     '',
+  captcha_answer:'',
+  text:          '',
+  image:         null,
+  attachment:    null,
 })
 
-// Вставляет HTML-тег в позицию курсора в textarea.
-// tagName — имя тега: 'strong', 'i', 'code', 'a'
-function insertTag(tagName) {
-  const textarea = textareaRef.value
-  if (!textarea) return
+const errors = reactive({})
 
-  // Получаем позицию курсора в textarea
-  const start = textarea.selectionStart
-  const end = textarea.selectionEnd
-  const selected = form.value.text.substring(start, end)
+// --- Прев'ю тексту (без виконання скриптів) ---
+const previewHtml = computed(() => {
+  // Просте перетворення: показуємо текст як є (bleach очистить на сервері)
+  return form.text
+})
 
-  let insertion
-  if (tagName === 'a') {
-    // Для ссылки добавляем атрибуты href и title
-    insertion = `<a href="" title="">${selected}</a>`
-  } else {
-    insertion = `<${tagName}>${selected}</${tagName}>`
+// --- CAPTCHA ---
+async function loadCaptcha() {
+  try {
+    const res = await api.getCaptcha()
+    captchaImage.value = res.data.image
+    form.captcha_answer = ''
+  } catch (err) {
+    console.error('Помилка завантаження CAPTCHA:', err)
+  }
+}
+
+// --- Файли ---
+function onImageChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  form.image = file
+  imagePreviewUrl.value = URL.createObjectURL(file)
+}
+
+function onTxtChange(e) {
+  const file = e.target.files[0]
+  if (!file) return
+  form.attachment = file
+}
+
+// --- Клієнтська валідація ---
+function validate() {
+  Object.keys(errors).forEach(k => delete errors[k])
+  let valid = true
+
+  if (!form.user_name.trim()) {
+    errors.user_name = 'User Name є обов\'язковим полем.'
+    valid = false
+  } else if (!/^[a-zA-Z0-9]+$/.test(form.user_name)) {
+    errors.user_name = 'Тільки латинські літери та цифри.'
+    valid = false
   }
 
-  // Вставляем тег в текст вокруг выделенного фрагмента
-  form.value.text =
-    form.value.text.substring(0, start) +
-    insertion +
-    form.value.text.substring(end)
+  if (!form.email.trim()) {
+    errors.email = 'E-mail є обов\'язковим полем.'
+    valid = false
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    errors.email = 'Невірний формат E-mail.'
+    valid = false
+  }
+
+  if (form.home_page && !/^https?:\/\/.+/.test(form.home_page)) {
+    errors.home_page = 'URL повинен починатися з http:// або https://'
+    valid = false
+  }
+
+  if (!form.captcha_answer.trim()) {
+    errors.captcha = 'Введіть відповідь CAPTCHA.'
+    valid = false
+  }
+
+  if (!form.text.trim()) {
+    errors.text = 'Текст є обов\'язковим полем.'
+    valid = false
+  }
+
+  if (form.attachment && form.attachment.size > 100 * 1024) {
+    errors.attachment = 'Файл перевищує 100 КБ.'
+    valid = false
+  }
+
+  return valid
 }
 
-// Обработчик выбора файла изображения.
-// event.target.files[0] — первый выбранный файл
-function handleImageChange(event) {
-  form.value.image = event.target.files[0] || null
-}
+// --- Відправка ---
+async function submitForm() {
+  if (!validate()) return
 
-// Обработчик выбора файла вложения
-function handleAttachmentChange(event) {
-  form.value.attachment = event.target.files[0] || null
-}
-
-// Обработчик отправки формы.
-// Вызывается при нажатии кнопки "Отправить" (событие @submit.prevent)
-// .prevent — предотвращает стандартную отправку формы (перезагрузку страницы)
-async function handleSubmit() {
   submitting.value = true
-  errorMessage.value = ''
-  successMessage.value = ''
 
-  // Шаг 1: Проверяем капчу через API
-  const captchaValid = await store.verifyCaptcha(form.value.captcha)
-  if (!captchaValid) {
-    errorMessage.value = 'Неверная капча. Попробуйте снова.'
-    store.refreshCaptcha()
-    form.value.captcha = ''
-    submitting.value = false
-    return  // Прерываем отправку если капча неверна
-  }
+  const data = new FormData()
+  data.append('user_name',     form.user_name)
+  data.append('email',         form.email)
+  data.append('captcha_answer', form.captcha_answer)
+  data.append('text',          form.text)
+  if (form.home_page)   data.append('home_page',   form.home_page)
+  if (props.parentId)   data.append('parent',       props.parentId)
+  if (form.image)       data.append('image',        form.image)
+  if (form.attachment)  data.append('attachment',   form.attachment)
 
-  // Шаг 2: Формируем FormData для отправки на сервер.
-  // FormData используется вместо JSON потому что форма содержит файлы.
-  const formData = new FormData()
-  formData.append('user_name', form.value.user_name)
-  formData.append('email', form.value.email)
-  formData.append('text', form.value.text)
-
-  // Добавляем необязательные поля только если они заполнены
-  if (form.value.home_page) formData.append('home_page', form.value.home_page)
-  if (form.value.image)     formData.append('image', form.value.image)
-  if (form.value.attachment) formData.append('attachment', form.value.attachment)
-
-  // Шаг 3: Отправляем комментарий через store
-  const success = await store.createComment(formData)
-
-  if (success) {
-    successMessage.value = 'Комментарий успешно добавлен!'
-    // Очищаем форму после успешной отправки
-    form.value = {
-      user_name: '', email: '', home_page: '',
-      text: '', captcha: '', image: null, attachment: null,
+  try {
+    await api.createComment(data)
+    emit('submitted')
+  } catch (err) {
+    if (err.response?.data) {
+      // Переносимо серверні помилки у fields
+      const data = err.response.data
+      if (data.captcha)    errors.captcha    = data.captcha
+      if (data.user_name)  errors.user_name  = data.user_name[0] || data.user_name
+      if (data.email)      errors.email      = data.email[0] || data.email
+      if (data.text)       errors.text       = data.text[0] || data.text
+      if (data.image)      errors.image      = data.image[0] || data.image
+      if (data.attachment) errors.attachment = data.attachment[0] || data.attachment
+      if (data.non_field_errors) errors.general = data.non_field_errors[0]
+      // Після невдачі оновлюємо CAPTCHA
+      await loadCaptcha()
+    } else {
+      errors.general = 'Помилка сервера. Спробуйте пізніше.'
     }
-    store.refreshCaptcha()
-  } else {
-    errorMessage.value = 'Ошибка при отправке. Проверьте данные.'
+  } finally {
+    submitting.value = false
   }
-
-  submitting.value = false
 }
+
+// --- Ініціалізація ---
+onMounted(() => {
+  loadCaptcha()
+})
 </script>
 
 <style scoped>
-/* scoped — стили применяются только к этому компоненту */
-.comment-form {
-  background: white;
-  padding: 25px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  margin-bottom: 30px;
-}
+.comment-form { padding: 20px 24px 24px; }
 
-h2 { margin-bottom: 20px; color: #2c3e50; }
-
-.form-group {
-  margin-bottom: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: bold;
-  font-size: 14px;
-}
-
-.form-group input,
-.form-group textarea {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.tags-toolbar {
-  margin-bottom: 5px;
-  font-size: 13px;
-  color: #666;
-}
-
-.tags-toolbar button {
-  margin-left: 5px;
-  padding: 2px 8px;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  cursor: pointer;
-  background: #f9f9f9;
-}
-
-.captcha-row {
+/* Вкладки */
+.form-tabs {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #e8eaf0;
+  padding-bottom: 8px;
 }
-
-.captcha-image {
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
-.btn-refresh {
-  padding: 5px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  cursor: pointer;
-  background: #f9f9f9;
-}
-
-.btn-submit {
-  width: 100%;
-  padding: 12px;
-  background-color: #2c3e50;
-  color: white;
+.tab-btn {
+  padding: 6px 18px;
   border: none;
-  border-radius: 4px;
-  font-size: 16px;
+  border-radius: 6px 6px 0 0;
   cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #888;
+  background: #f0f0f0;
+  transition: background 0.15s;
+}
+.tab-btn.active { background: #4f8ef7; color: #fff; }
+
+/* Прев'ю */
+.preview-pane { padding: 8px 0; }
+.preview-bubble {
+  background: #f8f9ff;
+  border-left: 3px solid #4f8ef7;
+  border-radius: 8px;
+  padding: 16px;
+}
+.preview-meta { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.preview-meta strong { color: #2d3436; }
+.preview-email { color: #4f8ef7; }
+.preview-text { font-size: 0.95rem; line-height: 1.6; }
+.preview-text :deep(code)   { background: #eee; padding: 1px 5px; border-radius: 4px; }
+.preview-text :deep(strong) { font-weight: 700; }
+.preview-text :deep(i)      { font-style: italic; }
+.preview-text :deep(a)      { color: #4f8ef7; }
+
+/* Форма */
+.form-body { display: flex; flex-direction: column; gap: 0; }
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 560px) { .form-row { grid-template-columns: 1fr; } }
+
+.req { color: #e74c3c; }
+
+/* CAPTCHA */
+.captcha-group {}
+.captcha-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.captcha-img {
+  border: 2px solid #dde3f5;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  height: 60px;
+}
+.captcha-img:hover { border-color: #4f8ef7; }
+.captcha-placeholder {
+  padding: 12px 20px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #888;
+  font-size: 0.85rem;
+}
+.captcha-placeholder:hover { border-color: #4f8ef7; color: #4f8ef7; }
+.captcha-refresh { font-size: 1.1rem; padding: 6px 10px; }
+
+/* Підказка */
+.text-hint { font-size: 0.76rem; color: #aaa; margin-top: 4px; }
+
+/* Прев'ю зображення */
+.img-preview { margin-top: 8px; }
+.img-preview img { max-width: 160px; border-radius: 8px; border: 2px solid #e0e7ff; }
+
+/* Файл вибраний */
+.file-selected {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: #555;
+  padding: 4px 8px;
+  border: 1.5px dashed #b0c4ff;
+  border-radius: 6px;
+  display: inline-block;
 }
 
-.btn-submit:disabled {
-  background-color: #aaa;
-  cursor: not-allowed;
-}
+.general-error { margin-bottom: 8px; }
 
-.alert {
-  padding: 10px 15px;
-  border-radius: 4px;
-  margin-bottom: 15px;
-  font-size: 14px;
+/* Футер */
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 18px;
+  border-top: 1px solid #f0f0f0;
+  padding-top: 14px;
 }
-
-.alert-success { background: #d4edda; color: #155724; }
-.alert-error   { background: #f8d7da; color: #721c24; }
 </style>

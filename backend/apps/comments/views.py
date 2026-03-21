@@ -5,15 +5,11 @@ View – это обработчик HTTP-запросов.
 сериализирует данные → возвращает JSON
 """
 import io
+import base64
 import random
 import string
 
-# Python Imaging Library
-from PIL import Image, ImageDraw, ImageFont
-from django.http import HttpResponse
-# DRF (Django REST Framework) содержит набор готовых классов,
-# уже умеющих обрабатывать стандартные запросы
-# DRF – это набор инструментов для построения API
+from PIL import Image, ImageDraw
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,8 +20,8 @@ from .serializers import CommentSerializer, CommentDetailSerializer
 
 class CommentListCreateView(generics.ListCreateAPIView):
     """
-    GET  /api/comments/        — список корневых комментариев
-    POST /api/comments/        — создать новый комментарий
+    GET  /api/comments/   — список корневых комментариев с пагинацией
+    POST /api/comments/   — создать новый комментарий
     """
     serializer_class = CommentSerializer
 
@@ -33,18 +29,34 @@ class CommentListCreateView(generics.ListCreateAPIView):
         # Возвращаем только корневые комментарии (без родителя)
         queryset = Comment.objects.filter(parent=None)
 
-        # Сортировка: ?ordering=created_at (старые) или -created_at (новые)
-        ordering = self.request.query_params.get('ordering', '-created_at')
-        allowed = ['created_at', '-created_at', 'user_name', '-user_name', 'email', '-email']
-        if ordering in allowed:
-            queryset = queryset.order_by(ordering)
+        # Сортировка через параметры sort_by и sort_order.
+        # sort_by    — поле: created_at, user_name, email
+        # sort_order — направление: asc (возрастание) или desc (убывание)
+        sort_by = self.request.query_params.get('sort_by', 'created_at')
+        sort_order = self.request.query_params.get('sort_order', 'desc')
+
+        allowed_fields = ['created_at', 'user_name', 'email']
+        if sort_by in allowed_fields:
+            # Минус перед полем означает обратный порядок (DESC)
+            prefix = '-' if sort_order == 'desc' else ''
+            queryset = queryset.order_by(f'{prefix}{sort_by}')
 
         return queryset
 
 
 class CommentDetailView(generics.RetrieveAPIView):
     """
-    GET /api/comments/<id>/    — один комментарий со всеми вложенными replies
+    GET /api/comments/<id>/   — один комментарий со всеми вложенными replies
+    """
+    queryset = Comment.objects.all()
+    serializer_class = CommentDetailSerializer
+
+
+class CommentRepliesView(generics.RetrieveAPIView):
+    """
+    GET /api/comments/<id>/replies/   — возвращает комментарий
+    вместе со всеми вложенными ответами (рекурсивно).
+    Используется когда пользователь нажимает "Відповіді" в таблице.
     """
     queryset = Comment.objects.all()
     serializer_class = CommentDetailSerializer
@@ -52,7 +64,8 @@ class CommentDetailView(generics.RetrieveAPIView):
 
 class CaptchaView(APIView):
     """
-    GET /api/captcha/          — генерирует картинку CAPTCHA и сохраняет текст в сессии
+    GET /api/captcha/   — генерирует CAPTCHA и возвращает base64-изображение.
+    Возвращает JSON: { "image": "data:image/png;base64,..." }
     """
 
     def get(self, request):
@@ -74,20 +87,27 @@ class CaptchaView(APIView):
             y = random.randint(0, height)
             draw.point((x, y), fill=(random.randint(100, 200),) * 3)
 
-        # Рисуем текст
+        # Рисуем текст капчи
         draw.text((10, 8), captcha_text, fill=(30, 30, 30))
 
-        # Конвертируем в байты и отправляем как PNG
+        # Конвертируем изображение в base64-строку.
+        # Браузер может отображать base64 напрямую через src="data:image/png;base64,..."
+        # Это удобнее чем отдельный URL — не нужен дополнительный HTTP-запрос.
         buffer = io.BytesIO()
         image.save(buffer, format='PNG')
         buffer.seek(0)
+        img_base64 = base64.b64encode(buffer.read()).decode('utf-8')
 
-        return HttpResponse(buffer, content_type='image/png')
+        return Response({
+            'image': f'data:image/png;base64,{img_base64}'
+        })
 
 
 class CaptchaVerifyView(APIView):
     """
-    POST /api/captcha/verify/  — проверяет введённый пользователем текст CAPTCHA
+    POST /api/captcha/verify/   — проверяет текст введённый пользователем.
+    Принимает: { "captcha": "ABC12" }
+    Возвращает: { "valid": true } или { "valid": false, "error": "..." }
     """
 
     def post(self, request):
@@ -95,11 +115,10 @@ class CaptchaVerifyView(APIView):
         correct = request.session.get('captcha', '')
 
         if user_input == correct:
-            # Удаляем капчу из сессии после успешной проверки
             del request.session['captcha']
             return Response({'valid': True})
 
         return Response(
-            {'valid': False, 'error': 'Неверный текст CAPTCHA.'},
+            {'valid': False, 'error': 'Невірний текст CAPTCHA.'},
             status=status.HTTP_400_BAD_REQUEST
         )
