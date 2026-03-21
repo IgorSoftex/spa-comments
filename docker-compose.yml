@@ -1,0 +1,68 @@
+# ============================================================
+# Docker Compose — инструмент для запуска нескольких контейнеров.
+# Этот файл описывает все сервисы проекта и как они связаны между собой.
+#
+# Запуск:  docker-compose up --build
+# Остановка: docker-compose down
+# ============================================================
+
+version: '3.9'
+
+services:
+
+  # ===== Сервис 1: Django бекенд =====
+  backend:
+    # Собираем образ из Dockerfile в папке backend/
+    build: ./backend
+
+    # Перезапускать контейнер автоматически если он упал.
+    # unless-stopped — перезапускать всегда кроме случая
+    # когда остановили вручную командой docker-compose stop.
+    restart: unless-stopped
+
+    # Переменные окружения внутри контейнера.
+    # Здесь можно переопределить настройки Django
+    # без изменения settings.py.
+    environment:
+      - DEBUG=False
+      - DJANGO_SETTINGS_MODULE=config.settings
+
+    volumes:
+      # База данных SQLite — хранится на хост-машине.
+      # Без этого база исчезнет при перезапуске контейнера.
+      - ./backend/db.sqlite3:/app/db.sqlite3
+
+      # Медиафайлы (загруженные изображения и документы).
+      # Общий volume между backend и frontend.
+      - media_volume:/app/media
+
+    # Порты не открываем наружу — backend доступен
+    # только внутри Docker-сети через nginx.
+
+  # ===== Сервис 2: Vue фронтенд + nginx =====
+  frontend:
+    # Собираем образ из Dockerfile в папке frontend/
+    build: ./frontend
+
+    restart: unless-stopped
+
+    # Пробрасываем порт наружу.
+    # 8888:80 — порт 8888 на хост-машине → порт 80 в контейнере nginx.
+    # Сайт будет доступен на http://localhost:8888
+    ports:
+      - "8888:80"
+
+    volumes:
+      # Монтируем медиафайлы чтобы nginx мог их раздавать.
+      - media_volume:/usr/share/nginx/media
+
+    # frontend зависит от backend — Docker запустит backend первым.
+    depends_on:
+      - backend
+
+# ===== Именованные volumes =====
+# Volumes — постоянное хранилище данных вне контейнеров.
+# Docker управляет ими автоматически.
+# media_volume — общий том для медиафайлов между backend и frontend.
+volumes:
+  media_volume:

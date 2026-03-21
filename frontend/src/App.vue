@@ -11,24 +11,13 @@
 
       <!-- ===== Панель действий ===== -->
       <div class="actions-bar">
-        <!-- Кнопка открывает модальное окно с формой нового комментария -->
         <button class="btn btn-primary" @click="openForm(null)">
           + Новий коментар
         </button>
-
-        <!-- Индикатор WebSocket-соединения.
-             v-if/v-else переключает между "Live" и "Offline" в зависимости
-             от состояния wsConnected. Зелёный = соединение есть,
-             красный = соединение разорвано (идёт переподключение). -->
         <span v-if="wsConnected" class="ws-badge ws-online">● Live</span>
         <span v-else class="ws-badge ws-offline">● Offline</span>
       </div>
 
-      <!-- ===== Список комментариев =====
-           Передаём данные вниз через props, получаем события наверх через emit.
-           @reply       — пользователь нажал "Відповісти" на комментарии
-           @sort        — пользователь кликнул на заголовок колонки
-           @page-change — пользователь переключил страницу пагинации -->
       <CommentList
         :comments="comments"
         :total="total"
@@ -44,24 +33,12 @@
 
     </main>
 
-    <!-- ===== Модальное окно с формой =====
-         v-if="showForm" — показываем только когда нужна форма.
-         @click.self="closeForm" — клик по тёмному фону закрывает модалку.
-         .self означает что событие должно произойти именно на этом элементе,
-         а не на дочерних (чтобы клик по форме не закрывал модалку). -->
     <div v-if="showForm" class="modal-overlay" @click.self="closeForm">
       <div class="modal">
         <div class="modal-header">
-          <!-- Заголовок меняется в зависимости от того,
-               создаём новый коментарий или отвечаем на существующий -->
           <h2>{{ formParentId ? 'Відповідь на коментар' : 'Новий коментар' }}</h2>
           <button class="modal-close" @click="closeForm">✕</button>
         </div>
-
-        <!-- Форма создания комментария.
-             :parent-id — ID родительского комментария (null для корневых).
-             @submitted — форма успешно отправлена, закрываем модалку.
-             @cancel    — пользователь нажал "Скасувати". -->
         <CommentForm
           :parent-id="formParentId"
           @submitted="onCommentSubmitted"
@@ -70,17 +47,9 @@
       </div>
     </div>
 
-    <!-- ===== Lightbox для просмотра файлов =====
-         Показывается когда пользователь кликает на прикреплённое изображение
-         или текстовый файл в комментарии.
-         lightbox содержит: { type: 'image'|'text', url/content: '...' }
-         @click="lightbox = null" — клик по тёмному фону закрывает lightbox.
-         @click.stop на контенте — останавливает всплытие события,
-         чтобы клик по картинке не закрывал lightbox. -->
     <div v-if="lightbox" class="lightbox-overlay" @click="lightbox = null">
       <div class="lightbox-content" @click.stop>
         <button class="lightbox-close" @click="lightbox = null">✕</button>
-        <!-- Показываем картинку или текст в зависимости от типа файла -->
         <img v-if="lightbox.type === 'image'" :src="lightbox.url" alt="preview" />
         <pre v-else class="lightbox-text">{{ lightbox.content }}</pre>
       </div>
@@ -90,11 +59,6 @@
 </template>
 
 <script setup>
-// ref()      — реактивная переменная (при изменении Vue обновляет шаблон)
-// onMounted  — хук: вызывается когда компонент добавлен в DOM
-// onUnmounted— хук: вызывается перед удалением компонента из DOM
-// provide    — передаёт данные/функции всем дочерним компонентам
-//              без необходимости передавать через props на каждом уровне
 import { ref, onMounted, onUnmounted, provide } from 'vue'
 
 import api from './api/comments.js'
@@ -103,59 +67,69 @@ import CommentForm from './components/CommentForm.vue'
 
 // ==================== СОСТОЯНИЕ ====================
 
-const comments    = ref([])   // массив комментариев текущей страницы
-const total       = ref(0)    // общее количество комментариев в БД
-const currentPage = ref(1)    // текущая страница пагинации
-const totalPages  = ref(1)    // всего страниц
-const sortBy      = ref('created_at') // поле сортировки
-const sortOrder   = ref('desc')       // направление: desc = новые первые
-const loading     = ref(false)        // true пока загружаем данные
-const showForm     = ref(false)       // показывать ли модальное окно формы
-const formParentId = ref(null)        // ID родителя (null = новый корневой коментарий)
-const wsConnected  = ref(false)       // статус WebSocket-соединения
-const lightbox     = ref(null)        // данные для Lightbox или null
+const comments     = ref([])
+const total        = ref(0)
+const currentPage  = ref(1)
+const totalPages   = ref(1)
+const sortBy       = ref('created_at')
+const sortOrder    = ref('desc')
+const loading      = ref(false)
+const showForm     = ref(false)
+const formParentId = ref(null)
+const wsConnected  = ref(false)
+const lightbox     = ref(null)
+const replySubmittedFor = ref(null) // сигнал для CommentList — какой родитель обновить
 
-// ==================== LIGHTBOX ====================
+// Последний комментарий полученный через WebSocket.
+// Передаётся дочерним компонентам через provide/inject.
+// CommentList следит за этим значением и обновляет раскрытые ответы.
+const wsLastComment = ref(null)
 
-// provide() делает функцию openLightbox доступной всем дочерним компонентам
-// через inject('openLightbox') — без необходимости передавать через props.
-// CommentItem и CommentList используют её для открытия Lightbox.
+// ==================== PROVIDE ====================
+
+// Передаём функцию открытия lightbox всем дочерним компонентам.
+// CommentItem вызывает её когда пользователь кликает на файл.
 provide('openLightbox', (data) => { lightbox.value = data })
+
+// Передаём последний WS-комментарий вниз по дереву компонентов.
+// CommentList подписывается на него через inject и watch,
+// чтобы автоматически обновлять раскрытые ответы.
+provide('wsLastComment', wsLastComment)
+provide('replySubmittedFor', replySubmittedFor)
 
 // ==================== WEBSOCKET ====================
 
-let socket = null // ссылка на WebSocket-соединение
+let socket = null
 
 function connectWebSocket() {
-  // Определяем протокол: wss для https, ws для http
   const wsUrl = `ws://${window.location.host}/ws/comments/`
   socket = new WebSocket(wsUrl)
 
-  // Соединение установлено — показываем индикатор "Live"
   socket.onopen = () => { wsConnected.value = true }
 
-  // Получено сообщение от сервера
   socket.onmessage = (event) => {
     const data = JSON.parse(event.data)
 
+    // Сохраняем последний комментарий — CommentList отреагирует через watch.
+    // Это нужно для автообновления раскрытых ответов когда приходит новая
+    // реплика (комментарий с parent !== null).
+    wsLastComment.value = data.comment
+
     // Если это новый корневой комментарий (без родителя) —
     // добавляем его в начало списка без перезагрузки страницы.
-    // Условие: мы на первой странице И сортировка по убыванию даты.
     if (data.type === 'new_comment' && data.comment.parent === null) {
       if (currentPage.value === 1 && sortOrder.value === 'desc') {
-        comments.value.unshift(data.comment) // добавляем в начало массива
+        comments.value.unshift(data.comment)
         total.value += 1
       }
     }
   }
 
-  // Соединение закрыто — показываем "Offline" и переподключаемся через 3 сек
   socket.onclose = () => {
     wsConnected.value = false
     setTimeout(connectWebSocket, 3000)
   }
 
-  // При ошибке закрываем соединение (onclose обработает переподключение)
   socket.onerror = () => { socket.close() }
 }
 
@@ -164,83 +138,76 @@ function connectWebSocket() {
 async function loadComments() {
   loading.value = true
   try {
-    // GET /api/comments/?page=1&sort_by=created_at&sort_order=desc
     const res = await api.getComments({
       page:       currentPage.value,
       sort_by:    sortBy.value,
       sort_order: sortOrder.value,
     })
-    comments.value  = res.data.results  // массив комментариев страницы
-    total.value     = res.data.count    // общее количество
-    // Вычисляем количество страниц: делим общее кол-во на размер страницы (25)
+    comments.value   = res.data.results
+    total.value      = res.data.count
     totalPages.value = Math.ceil(res.data.count / 25)
   } catch (err) {
     console.error('Помилка завантаження коментарів:', err)
   } finally {
-    // finally выполняется всегда — и при успехе и при ошибке
     loading.value = false
   }
 }
 
 // ==================== ОБРАБОТЧИКИ СОБЫТИЙ ====================
 
-// Открыть форму. parentId — ID комментария на который отвечаем,
-// или null если создаём новый корневой комментарий.
 function openForm(parentId) {
   formParentId.value = parentId
   showForm.value = true
 }
 
-// Закрыть модальное окно и сбросить parentId
 function closeForm() {
   showForm.value = false
   formParentId.value = null
 }
 
-// Вызывается после успешной отправки формы.
-// Закрываем форму, возвращаемся на первую страницу и перезагружаем список.
 async function onCommentSubmitted() {
+  // Сохраняем parentId ДО вызова closeForm() — она сбрасывает formParentId в null.
+  // Нам нужен этот ID чтобы сказать CommentList какие ответы перезагрузить.
+  const parentId = formParentId.value
+
   closeForm()
   currentPage.value = 1
   await loadComments()
+
+  // Если был добавлен ОТВЕТ (не корневой комментарий) — сигнализируем CommentList.
+  // Используем объект с timestamp: даже если parentId тот же, watch сработает
+  // потому что это новый объект (другая ссылка в памяти).
+  if (parentId !== null) {
+    replySubmittedFor.value = { parentId, ts: Date.now() }
+  }
 }
 
-// Обработчик клика на заголовок колонки таблицы.
-// field — поле ('user_name', 'email', 'created_at')
-// order — направление ('asc' или 'desc')
 function handleSort({ field, order }) {
-  sortBy.value    = field
-  sortOrder.value = order
-  currentPage.value = 1  // при смене сортировки всегда возвращаемся на стр. 1
+  sortBy.value      = field
+  sortOrder.value   = order
+  currentPage.value = 1
   loadComments()
 }
 
-// Обработчик переключения страницы пагинации
 function handlePageChange(page) {
   currentPage.value = page
   loadComments()
-  // Плавно прокручиваем страницу вверх
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 // ==================== ЖИЗНЕННЫЙ ЦИКЛ ====================
 
-// onMounted — вызывается когда компонент добавлен в DOM и готов к работе.
-// Загружаем комментарии и подключаемся к WebSocket.
 onMounted(() => {
   loadComments()
   connectWebSocket()
 })
 
-// onUnmounted — вызывается перед удалением компонента.
-// Закрываем WebSocket чтобы не было утечки памяти.
 onUnmounted(() => {
   if (socket) socket.close()
 })
 </script>
 
 <style>
-/* ===== Глобальні стилі — застосовуються до всієї сторінки ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -256,7 +223,6 @@ body {
   padding: 0 16px 40px;
 }
 
-/* ===== Шапка з градієнтом ===== */
 .app-header {
   background: linear-gradient(135deg, #4f8ef7, #6c5ce7);
   color: #fff;
@@ -268,7 +234,6 @@ body {
 .app-header h1 { font-size: 2rem; }
 .subtitle { opacity: 0.85; margin-top: 4px; }
 
-/* ===== Панель дій ===== */
 .actions-bar {
   display: flex;
   align-items: center;
@@ -279,7 +244,6 @@ body {
 .ws-online  { color: #27ae60; }
 .ws-offline { color: #e74c3c; }
 
-/* ===== Кнопки ===== */
 .btn {
   padding: 8px 18px;
   border: none;
@@ -297,7 +261,6 @@ body {
 .btn-danger    { background: #e74c3c; color: #fff; }
 .btn-sm { padding: 4px 12px; font-size: 0.82rem; }
 
-/* ===== Глобальні стилі форми ===== */
 .form-group { margin-bottom: 14px; }
 .form-group label {
   display: block;
@@ -323,7 +286,6 @@ body {
 .form-group textarea { min-height: 100px; resize: vertical; }
 .field-error { color: #e74c3c; font-size: 0.8rem; margin-top: 3px; }
 
-/* ===== Модальне вікно ===== */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.5);
@@ -351,7 +313,6 @@ body {
 }
 .modal-close:hover { color: #333; }
 
-/* ===== Lightbox ===== */
 .lightbox-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.85);

@@ -160,7 +160,7 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 # ==================== ЛОКАЛИЗАЦИЯ ====================
 LANGUAGE_CODE = 'ru-ru'
-TIME_ZONE = 'Europe/Kiev'
+TIME_ZONE = 'Europe/Kyiv'
 USE_I18N = True   # интернационализация (переводы)
 USE_TZ = True     # использовать временные зоны
 
@@ -169,10 +169,16 @@ USE_TZ = True     # использовать временные зоны
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # ==================== DRF НАСТРОЙКИ ====================
-# PageNumberPagination — стандартная пагинация DRF.
-# Возвращает {count, next, previous, results} вместо простого массива.
-# PAGE_SIZE – количество комментариев на одной странице.
 REST_FRAMEWORK = {
+    # Отключаем стандартные классы аутентификации (BasicAuthentication + SessionAuthentication).
+    # SessionAuthentication принудительно требует CSRF-токен для всех POST-запросов.
+    # Так как наш API публичный (без логина пользователей), аутентификация не нужна.
+    # Сессии Django при этом продолжают работать — капча хранится в сессии независимо.
+    'DEFAULT_AUTHENTICATION_CLASSES': [],
+
+    # Убираем ограничения доступа — API открытый.
+    'DEFAULT_PERMISSION_CLASSES': [],
+
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 25,
 }

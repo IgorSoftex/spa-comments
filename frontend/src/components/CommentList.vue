@@ -1,14 +1,11 @@
 <template>
   <div class="comment-list">
-    <!-- Завантаження -->
     <div v-if="loading" class="loading">Завантаження...</div>
 
-    <!-- Пусто -->
     <div v-else-if="!comments.length" class="empty">
       Коментарів ще немає. Будьте першим! 🚀
     </div>
 
-    <!-- Таблиця кореневих коментарів -->
     <div v-else>
       <div class="table-meta">
         Всього коментарів: <strong>{{ total }}</strong>
@@ -18,7 +15,6 @@
         <table class="comments-table">
           <thead>
             <tr>
-              <!-- Клікабельні заголовки для сортування -->
               <th @click="toggleSort('user_name')" class="sortable">
                 User Name {{ sortIcon('user_name') }}
               </th>
@@ -35,7 +31,6 @@
           </thead>
           <tbody>
             <template v-for="comment in comments" :key="comment.id">
-              <!-- Рядок кореневого коментаря -->
               <tr class="comment-row">
                 <td>
                   <span class="username">{{ comment.user_name }}</span>
@@ -60,7 +55,6 @@
                 </td>
               </tr>
 
-              <!-- Файли коментаря (зображення / TXT) -->
               <tr v-if="comment.image || comment.attachment" class="files-row">
                 <td colspan="6">
                   <div class="file-previews">
@@ -75,7 +69,6 @@
                 </td>
               </tr>
 
-              <!-- Розкриті відповіді -->
               <tr v-if="expandedIds.has(comment.id)" class="replies-row">
                 <td colspan="6">
                   <div v-if="loadingReplies.has(comment.id)" class="replies-loading">
@@ -97,7 +90,6 @@
         </table>
       </div>
 
-      <!-- Пагінація -->
       <Pagination
         :current-page="currentPage"
         :total-pages="totalPages"
@@ -108,29 +100,101 @@
 </template>
 
 <script setup>
-import { ref, reactive, inject } from 'vue'
+import { ref, reactive, inject, watch } from 'vue'
 import api from '../api/comments.js'
 import CommentItem from './CommentItem.vue'
 import Pagination from './Pagination.vue'
 
 const props = defineProps({
-  comments:    { type: Array,  default: () => [] },
-  total:       { type: Number, default: 0 },
-  currentPage: { type: Number, default: 1 },
-  totalPages:  { type: Number, default: 1 },
-  sortBy:      { type: String, default: 'created_at' },
-  sortOrder:   { type: String, default: 'desc' },
+  comments:    { type: Array,   default: () => [] },
+  total:       { type: Number,  default: 0 },
+  currentPage: { type: Number,  default: 1 },
+  totalPages:  { type: Number,  default: 1 },
+  sortBy:      { type: String,  default: 'created_at' },
+  sortOrder:   { type: String,  default: 'desc' },
   loading:     { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['reply', 'sort', 'page-change'])
-const openLightbox = inject('openLightbox')
 
-const expandedIds   = ref(new Set())
+const openLightbox      = inject('openLightbox')
+const wsLastComment     = inject('wsLastComment')
+const replySubmittedFor = inject('replySubmittedFor')
+
+const expandedIds    = ref(new Set())
 const loadingReplies = ref(new Set())
-const repliesMap    = reactive({})
+const repliesMap     = reactive({})
 
-// --- Сортування ---
+// Карта: ID вложенного комментария → ID корневого комментария.
+// Нужна чтобы по ID ответа на ответ найти корневой элемент таблицы.
+// Пример: Julia(id=3) ответила на Ihor(id=1) → nestedToRootMap[3] = 1
+//         Peter(id=5) ответил на Julia(id=3) → nestedToRootMap[5] = 1
+// Когда Peter добавляет ответ на Julia — мы перезагружаем replies Ihor.
+const nestedToRootMap = reactive({})
+
+// ==================== ДОПОМІЖНІ ФУНКЦІЇ ====================
+
+// Рекурсивно обходит дерево ответов и заполняет nestedToRootMap.
+// replies — массив ответов для корневого комментария rootId.
+function buildNestedMap(replies, rootId) {
+  for (const reply of replies) {
+    nestedToRootMap[reply.id] = rootId
+    if (reply.replies && reply.replies.length) {
+      buildNestedMap(reply.replies, rootId)
+    }
+  }
+}
+
+// Перезагружает список ответов для корневого комментария rootId.
+// Используется и при получении WS-сообщения, и при отправке формы.
+function reloadReplies(rootId) {
+  loadingReplies.value.add(rootId)
+  api.getReplies(rootId)
+    .then(res => {
+      repliesMap[rootId] = res.data.replies
+      // Обновляем карту вложенных ID после получения свежих данных
+      buildNestedMap(res.data.replies, rootId)
+    })
+    .catch(err => console.error('Помилка оновлення відповідей:', err))
+    .finally(() => loadingReplies.value.delete(rootId))
+}
+
+// Ищет корневой комментарий для parentId и перезагружает его если он развернут.
+// parentId может быть:
+//   1. ID корневого комментария (прямой ответ на элемент таблицы)
+//   2. ID вложенного комментария (ответ на ответ любой глубины)
+function reloadForParent(parentId) {
+  if (expandedIds.value.has(parentId)) {
+    // Прямой ответ на корневой комментарий — перезагружаем его
+    reloadReplies(parentId)
+  } else if (nestedToRootMap[parentId]) {
+    // Вложенный ответ — ищем корневой через карту и перезагружаем его
+    const rootId = nestedToRootMap[parentId]
+    if (expandedIds.value.has(rootId)) {
+      reloadReplies(rootId)
+    }
+  }
+}
+
+// ==================== WATCHES ====================
+
+// Реагируем на новый комментарий через WebSocket (от других пользователей).
+watch(wsLastComment, (newComment) => {
+  if (newComment && newComment.parent !== null) {
+    reloadForParent(newComment.parent)
+  }
+})
+
+// Реагируем на отправку формы текущим пользователем.
+// Это основной механизм обновления — надёжнее WebSocket.
+watch(replySubmittedFor, (data) => {
+  if (data) {
+    reloadForParent(data.parentId)
+  }
+})
+
+// ==================== СОРТУВАННЯ ====================
+
 function toggleSort(field) {
   let order = 'desc'
   if (props.sortBy === field) {
@@ -144,23 +208,20 @@ function sortIcon(field) {
   return props.sortOrder === 'asc' ? '↑' : '↓'
 }
 
-// --- Відповіді ---
+// ==================== ВІДПОВІДІ ====================
+
 async function toggleReplies(comment) {
   if (expandedIds.value.has(comment.id)) {
-    // Згортаємо відповіді — просто прибираємо зі списку відкритих
     expandedIds.value.delete(comment.id)
     return
   }
-  // Розгортаємо відповіді — завжди завантажуємо свіжі дані з сервера.
-  // Раніше тут була перевірка if (!repliesMap[comment.id]) яка повертала
-  // кешовані дані. Це призводило до того що після додавання нової відповіді
-  // через форму — старий кеш показував застарілі дані без нового коментаря.
-  // Рішення: завжди робити запит при розгортанні, щоб дані були актуальними.
   expandedIds.value.add(comment.id)
   loadingReplies.value.add(comment.id)
   try {
     const res = await api.getReplies(comment.id)
     repliesMap[comment.id] = res.data.replies
+    // Строим карту вложенных ID чтобы потом находить корень для любого потомка
+    buildNestedMap(res.data.replies, comment.id)
   } catch (err) {
     console.error('Помилка завантаження відповідей:', err)
   } finally {
@@ -168,7 +229,8 @@ async function toggleReplies(comment) {
   }
 }
 
-// --- Файли (Lightbox) ---
+// ==================== ФАЙЛИ (LIGHTBOX) ====================
+
 function openImage(url) {
   openLightbox({ type: 'image', url })
 }
@@ -187,7 +249,8 @@ function fileName(url) {
   return url.split('/').pop()
 }
 
-// --- Форматування дати ---
+// ==================== ФОРМАТУВАННЯ ДАТИ ====================
+
 function formatDate(dt) {
   return new Date(dt).toLocaleString('uk-UA', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -235,10 +298,7 @@ function formatDate(dt) {
   white-space: nowrap;
 }
 
-.sortable {
-  cursor: pointer;
-  user-select: none;
-}
+.sortable { cursor: pointer; user-select: none; }
 .sortable:hover { color: #4f8ef7; }
 
 .comments-table td {
@@ -276,7 +336,6 @@ function formatDate(dt) {
   flex-wrap: wrap;
 }
 
-/* Файли */
 .files-row td { padding: 4px 14px 12px; }
 .file-previews { display: flex; gap: 12px; flex-wrap: wrap; }
 .file-thumb {
@@ -295,7 +354,6 @@ function formatDate(dt) {
 .file-label { font-size: 0.75rem; color: #4f8ef7; }
 .file-txt { padding: 8px 14px; font-size: 0.85rem; color: #555; }
 
-/* Відповіді */
 .replies-row td { padding: 0 0 0 48px; }
 .replies-loading { padding: 12px; color: #888; }
 </style>
