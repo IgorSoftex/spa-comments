@@ -47,7 +47,7 @@ SPA-приложение для оставления комментариев с
 
 ---
 
-## Запуск через Docker
+## Запуск через Docker (рекомендуется)
 
 ### Требования
 
@@ -56,8 +56,9 @@ SPA-приложение для оставления комментариев с
 
 ### Шаги
 
+```bash
 # 1. Клонировать репозиторий
-git clone <URL репозитория>
+git clone https://github.com/IgorSoftex/spa-comments.git
 cd spa-comments
 
 # 2. Собрать и запустить контейнеры
@@ -68,10 +69,13 @@ docker-compose up --build
 
 # 4. Django-админка
 #    http://localhost:8888/admin/
+```
 
 При первом запуске создайте суперпользователя (пока контейнеры запущены, в отдельном терминале):
 
+```bash
 docker-compose exec backend python manage.py createsuperuser
+```
 
 ---
 
@@ -79,6 +83,7 @@ docker-compose exec backend python manage.py createsuperuser
 
 ### Backend
 
+```bash
 cd backend
 
 # Создать и активировать виртуальное окружение
@@ -97,14 +102,17 @@ python manage.py createsuperuser
 
 # Запустить через Daphne (поддерживает WebSocket)
 daphne -p 8000 config.asgi:application
+```
 
 ### Frontend
 
+```bash
 cd frontend
 
 npm install
 npm run dev
 # Открыть http://localhost:5173/
+```
 
 > При локальном запуске фронтенд проксирует запросы `/api/` и `/ws/` на `http://localhost:8000`
 > через настройки Vite в `vite.config.js`.
@@ -113,6 +121,7 @@ npm run dev
 
 ## Структура проекта
 
+```
 spa-comments/
 ├── backend/
 │   ├── apps/
@@ -148,29 +157,30 @@ spa-comments/
 │   ├── nginx.conf               # Конфигурация nginx для Docker
 │   └── Dockerfile
 └── docker-compose.yml
+```
 
 ---
 
 ## API Endpoints
 
-| Метод  | URL                              | Описание                                      |
-|--------|----------------------------------|-----------------------------------------------|
-| GET    | `/api/comments/`                 | Список корневых комментариев (пагинация, сортировка) |
-| POST   | `/api/comments/`                 | Создать комментарий                           |
-| GET    | `/api/comments/<id>/`            | Один комментарий со всеми вложенными ответами |
-| GET    | `/api/comments/<id>/replies/`    | Ответы на комментарий (рекурсивно)            |
-| GET    | `/api/captcha/`                  | Получить CAPTCHA (base64 PNG)                 |
-| POST   | `/api/captcha/verify/`           | Проверить ответ CAPTCHA                       |
-| GET    | `/admin/`                        | Django-админка                                |
-| WS     | `/ws/comments/`                  | WebSocket для живых обновлений                |
+| Метод | URL                           | Описание                                           |
+|-------|-------------------------------|----------------------------------------------------|
+| GET   | `/api/comments/`              | Список корневых комментариев (пагинация, сортировка) |
+| POST  | `/api/comments/`              | Создать комментарий                                |
+| GET   | `/api/comments/<id>/`         | Один комментарий со всеми вложенными ответами      |
+| GET   | `/api/comments/<id>/replies/` | Ответы на комментарий (рекурсивно)                 |
+| GET   | `/api/captcha/`               | Получить CAPTCHA (base64 PNG)                      |
+| POST  | `/api/captcha/verify/`        | Проверить ответ CAPTCHA                            |
+| GET   | `/admin/`                     | Django-админка                                     |
+| WS    | `/ws/comments/`               | WebSocket для живых обновлений                     |
 
 ### Параметры GET `/api/comments/`
 
-| Параметр     | Значения                          | По умолчанию  |
-|--------------|-----------------------------------|---------------|
-| `page`       | номер страницы                    | `1`           |
-| `sort_by`    | `created_at`, `user_name`, `email`| `created_at`  |
-| `sort_order` | `asc`, `desc`                     | `desc`        |
+| Параметр     | Значения                           | По умолчанию |
+|--------------|------------------------------------|--------------|
+| `page`       | номер страницы                     | `1`          |
+| `sort_by`    | `created_at`, `user_name`, `email` | `created_at` |
+| `sort_order` | `asc`, `desc`                      | `desc`       |
 
 ---
 
@@ -178,10 +188,12 @@ spa-comments/
 
 В тексте комментария разрешены следующие теги:
 
+```html
 <a href="" title=""> ... </a>
 <code> ... </code>
 <i> ... </i>
 <strong> ... </strong>
+```
 
 Все остальные теги автоматически удаляются библиотекой **bleach** на сервере.
 
@@ -191,9 +203,11 @@ spa-comments/
 
 Перед развёртыванием на сервере в `backend/config/settings.py` замените:
 
+```python
 SECRET_KEY = 'ваш-секретный-ключ-минимум-50-символов'
 DEBUG = False
 ALLOWED_HOSTS = ['ваш-домен.com']
+```
 
 ---
 
@@ -201,7 +215,9 @@ ALLOWED_HOSTS = ['ваш-домен.com']
 
 Для проверки что всё работает с нуля:
 
-git clone <URL репозитория>
+```bash
+git clone https://github.com/IgorSoftex/spa-comments.git
 cd spa-comments
 docker-compose up --build
 # Открыть http://localhost:8888/
+```
