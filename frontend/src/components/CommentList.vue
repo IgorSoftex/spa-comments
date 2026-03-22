@@ -1,14 +1,14 @@
 <template>
   <div class="comment-list">
-    <div v-if="loading" class="loading">Завантаження...</div>
+    <div v-if="loading" class="loading">Загрузка...</div>
 
     <div v-else-if="!comments.length" class="empty">
-      Коментарів ще немає. Будьте першим! 🚀
+      Комментариев еще нет. Будьте первым! 🚀
     </div>
 
     <div v-else>
       <div class="table-meta">
-        Всього коментарів: <strong>{{ total }}</strong>
+        Всего комментариев: <strong>{{ total }}</strong>
       </div>
 
       <div class="table-wrapper">
@@ -24,9 +24,9 @@
               <th @click="toggleSort('created_at')" class="sortable">
                 Дата {{ sortIcon('created_at') }}
               </th>
-              <th>Повідомлення</th>
-              <th>Відповіді</th>
-              <th>Дії</th>
+              <th>Сообщение</th>
+              <th>Ответы</th>
+              <th>Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -47,10 +47,10 @@
                 </td>
                 <td class="actions-cell">
                   <button class="btn btn-sm btn-secondary" @click="toggleReplies(comment)">
-                    {{ expandedIds.has(comment.id) ? 'Згорнути' : 'Відповіді' }}
+                    {{ expandedIds.has(comment.id) ? 'Свернуть' : 'Ответы' }}
                   </button>
                   <button class="btn btn-sm btn-primary" @click="$emit('reply', comment.id)">
-                    Відповісти
+                    Ответить
                   </button>
                 </td>
               </tr>

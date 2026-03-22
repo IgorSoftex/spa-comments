@@ -24,7 +24,7 @@
             <a :href="form.home_page" target="_blank">{{ form.home_page }}</a>
           </span>
         </div>
-        <div class="preview-text" v-html="previewHtml || '<em>Текст повідомлення...</em>'"></div>
+        <div class="preview-text" v-html="previewHtml || '<em>Текст сообщения...</em>'"></div>
       </div>
     </div>
 
@@ -39,7 +39,7 @@
             id="user_name"
             v-model="form.user_name"
             type="text"
-            placeholder="Тільки латиниця та цифри"
+            placeholder="Только латиница и цифры"
             autocomplete="username"
           />
           <div v-if="errors.user_name" class="field-error">{{ errors.user_name }}</div>
@@ -61,7 +61,7 @@
 
       <!-- Home page -->
       <div class="form-group">
-        <label for="home_page">Home page (необов'язково)</label>
+        <label for="home_page">Home page (необязательно)</label>
         <input
           id="home_page"
           v-model="form.home_page"
@@ -93,7 +93,7 @@
         <input
           v-model="form.captcha_answer"
           type="text"
-          placeholder="Введіть символи з картинки"
+          placeholder="Введите символы с картинки"
           style="margin-top: 6px;"
           maxlength="10"
         />
@@ -107,20 +107,20 @@
         <textarea
           ref="textareaEl"
           v-model="form.text"
-          placeholder="Ваше повідомлення... Можна використовувати: <i>, <strong>, <code>, <a>"
+          placeholder="Ваше сообщение... Можно использовать: <i>, <strong>, <code>, <a>"
           rows="5"
         ></textarea>
         <div v-if="errors.text" class="field-error">{{ errors.text }}</div>
         <div class="text-hint">
-          Дозволені теги: &lt;a href="" title=""&gt;, &lt;code&gt;, &lt;i&gt;, &lt;strong&gt;
+          Разрешенные теги: &lt;a href="" title=""&gt;, &lt;code&gt;, &lt;i&gt;, &lt;strong&gt;
         </div>
       </div>
 
       <!-- Файли -->
       <div class="form-row">
-        <!-- Зображення -->
+        <!-- Изображение -->
         <div class="form-group">
-          <label>Зображення (JPG, GIF, PNG; буде зменшено до 320×240)</label>
+          <label>Изображение (JPG, GIF, PNG; будет уменьшено до 320×240)</label>
           <input type="file" accept=".jpg,.jpeg,.gif,.png" @change="onImageChange" />
           <div v-if="errors.image" class="field-error">{{ errors.image }}</div>
           <div v-if="imagePreviewUrl" class="img-preview">
@@ -130,7 +130,7 @@
 
         <!-- TXT -->
         <div class="form-group">
-          <label>Текстовий файл (TXT, макс. 100 КБ)</label>
+          <label>Текстовый файл (TXT, макс. 100 КБ)</label>
           <input type="file" accept=".txt" @change="onTxtChange" />
           <div v-if="errors.attachment" class="field-error">{{ errors.attachment }}</div>
           <div v-if="form.attachment" class="file-selected">
@@ -145,10 +145,10 @@
       <!-- Кнопки -->
       <div class="form-footer">
         <button type="button" class="btn btn-secondary" @click="$emit('cancel')">
-          Скасувати
+          Отменить
         </button>
         <button type="submit" class="btn btn-success" :disabled="submitting">
-          {{ submitting ? 'Надсилаємо...' : 'Надіслати' }}
+          {{ submitting ? 'Отправляем...' : 'Отправить' }}
         </button>
       </div>
     </form>
@@ -196,7 +196,7 @@ async function loadCaptcha() {
     captchaImage.value = res.data.image
     form.captcha_answer = ''
   } catch (err) {
-    console.error('Помилка завантаження CAPTCHA:', err)
+    console.error('Ошибка загрузки CAPTCHA:', err)
   }
 }
 
@@ -220,38 +220,38 @@ function validate() {
   let valid = true
 
   if (!form.user_name.trim()) {
-    errors.user_name = 'User Name є обов\'язковим полем.'
+    errors.user_name = 'User Name является обязательным полем.'
     valid = false
   } else if (!/^[a-zA-Z0-9]+$/.test(form.user_name)) {
-    errors.user_name = 'Тільки латинські літери та цифри.'
+    errors.user_name = 'Только латинские буквы и цифры.'
     valid = false
   }
 
   if (!form.email.trim()) {
-    errors.email = 'E-mail є обов\'язковим полем.'
+    errors.email = 'E-mail является обязательным полем.'
     valid = false
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    errors.email = 'Невірний формат E-mail.'
+    errors.email = 'Неверный формат E-mail.'
     valid = false
   }
 
   if (form.home_page && !/^https?:\/\/.+/.test(form.home_page)) {
-    errors.home_page = 'URL повинен починатися з http:// або https://'
+    errors.home_page = 'URL должен начинаться с http:// або https://'
     valid = false
   }
 
   if (!form.captcha_answer.trim()) {
-    errors.captcha = 'Введіть відповідь CAPTCHA.'
+    errors.captcha = 'Введите ответ CAPTCHA.'
     valid = false
   }
 
   if (!form.text.trim()) {
-    errors.text = 'Текст є обов\'язковим полем.'
+    errors.text = 'Текст является обязательным полем.'
     valid = false
   }
 
   if (form.attachment && form.attachment.size > 100 * 1024) {
-    errors.attachment = 'Файл перевищує 100 КБ.'
+    errors.attachment = 'Файл превышает 100 КБ.'
     valid = false
   }
 
@@ -291,7 +291,7 @@ async function submitForm() {
       // Після невдачі оновлюємо CAPTCHA
       await loadCaptcha()
     } else {
-      errors.general = 'Помилка сервера. Спробуйте пізніше.'
+      errors.general = 'Ошибка сервера. Попробуйте позже.'
     }
   } finally {
     submitting.value = false

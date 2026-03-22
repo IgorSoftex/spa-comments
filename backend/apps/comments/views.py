@@ -25,6 +25,28 @@ class CommentListCreateView(generics.ListCreateAPIView):
     """
     serializer_class = CommentSerializer
 
+    def create(self, request, *args, **kwargs):
+        # Проверяем CAPTCHA перед сохранением комментария
+        user_input = request.data.get('captcha_answer', '').strip().upper()
+        correct = request.session.get('captcha', '')
+
+        if not correct:
+            return Response(
+                {'captcha': 'CAPTCHA устарела. Обновите страницу и попробуйте снова.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if user_input != correct:
+            return Response(
+                {'captcha': 'Неверный текст CAPTCHA.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # CAPTCHA верна — удаляем из сессии (одноразовая)
+        del request.session['captcha']
+
+        return super().create(request, *args, **kwargs)
+
     def get_queryset(self):
         # Возвращаем только корневые комментарии (без родителя)
         queryset = Comment.objects.filter(parent=None)

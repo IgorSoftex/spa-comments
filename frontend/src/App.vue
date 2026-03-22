@@ -3,8 +3,8 @@
 
     <!-- ===== Шапка сайта ===== -->
     <header class="app-header">
-      <h1>💬 SPA Коментарі</h1>
-      <p class="subtitle">Залишайте коментарі та відповідайте на інших</p>
+      <h1>💬 SPA Коментарии</h1>
+      <p class="subtitle">Оставляйте комментарии и отвечайте другим</p>
     </header>
 
     <main class="app-main">
@@ -12,7 +12,7 @@
       <!-- ===== Панель действий ===== -->
       <div class="actions-bar">
         <button class="btn btn-primary" @click="openForm(null)">
-          + Новий коментар
+          + Новый комментарий
         </button>
         <span v-if="wsConnected" class="ws-badge ws-online">● Live</span>
         <span v-else class="ws-badge ws-offline">● Offline</span>
@@ -36,7 +36,7 @@
     <div v-if="showForm" class="modal-overlay" @click.self="closeForm">
       <div class="modal">
         <div class="modal-header">
-          <h2>{{ formParentId ? 'Відповідь на коментар' : 'Новий коментар' }}</h2>
+          <h2>{{ formParentId ? 'Ответ на комментарий' : 'Новый комментарий' }}</h2>
           <button class="modal-close" @click="closeForm">✕</button>
         </div>
         <CommentForm
