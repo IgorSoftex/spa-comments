@@ -34,8 +34,8 @@ class CommentSerializer(serializers.ModelSerializer):
         return obj.replies.count()
 
     def validate_user_name(self, value):
-        """Только латиница, цифры и дефис."""
-        if not re.match(r'^[a-zA-Z0-9\-]+$', value):
+        """Только латиница и цифры."""
+        if not re.match(r'^[a-zA-Z0-9]+$', value):
             raise serializers.ValidationError(
                 'Имя может содержать только латинские буквы, цифры и дефисы.'
             )
@@ -55,7 +55,7 @@ class CommentSerializer(serializers.ModelSerializer):
         return cleaned
 
     def validate_image(self, value):
-        """Изображение: только JPEG/PNG, максимум 1 МБ."""
+        """Изображение: только JPEG/PNG/GIF, максимум 10 МБ."""
         if value:
             allowed_types = ['image/jpeg', 'image/png', 'image/gif']
             if value.content_type not in allowed_types:
