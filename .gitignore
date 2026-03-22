@@ -214,4 +214,4 @@ node_modules/
 frontend/dist/
 
 # Other
-schema.sql
+# schema.sql
