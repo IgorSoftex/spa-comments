@@ -30,7 +30,7 @@ services:
     volumes:
       # База данных SQLite — хранится на хост-машине.
       # Без этого база исчезнет при перезапуске контейнера.
-      - ./backend/db.sqlite3:/app/db.sqlite3
+      - sqlite_data:/app/sqlite
 
       # Медиафайлы (загруженные изображения и документы).
       # Общий volume между backend и frontend.
@@ -65,4 +65,5 @@ services:
 # Docker управляет ими автоматически.
 # media_volume — общий том для медиафайлов между backend и frontend.
 volumes:
+  sqlite_data:
   media_volume:
